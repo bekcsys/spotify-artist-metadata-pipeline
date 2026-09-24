@@ -1,4 +1,4 @@
-# 🎧 Spotify Metadata Collector 
+# Spotify Metadata Ingestion Pipeline 
 
 ## Overview
 

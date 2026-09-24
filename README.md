@@ -1,146 +1,103 @@
-# Spotify Metadata Ingestion Pipeline 
+# Spotify Artist Metadata Pipeline
 
-## Overview
+Python pipeline that collects Spotify artist IDs from Wikidata, writes them to CSV, and enriches rows with Spotify Web API metadata.
 
-This project focuses on retrieving and utilizing **Spotify metadata**—such as artists, albums, and tracks—for data enrichment, analytics, and integration with other datasets.
+[![Watch the video](docs/YT.png)](https://youtu.be/BMG9xX09JMg)
 
-The core contribution is the automated retrieval of **8,000+ Spotify IDs**, opening doors for deeper analytics and insights on popularity, follower counts, and estimated monthly listeners using spotify data.
+Spotify API calls need artist, album, or track IDs (embedded in URIs):
 
-[![Watch the video](/resources/YT.png)](https://youtu.be/BMG9xX09JMg)
+<img width="100%" alt="Spotify artist page" src="docs/charley.png">
+<img width="100%" alt="Spotify artist ID" src="docs/ID.png">
 
-### Why the automation matters ?
+## Data Flow
 
-Manually collecting Spotify IDs, such as searching using the artist's name on spotify, is time-consuming. This project streamlines the process using **SPARQL queries via Wikidata**, allowing you to:
+```
+Wikidata SPARQL  ->  artist ID CSV  ->  Spotify URL column  ->  Spotify Web API  ->  metadata CSV
+```
 
-- Programmatically gather thousands of Spotify IDs
-- Use these IDs to pull enriched metadata via Spotify's Web API
-- Enable large-scale music analytics and research
+1. **Source:** Wikidata musicians with a Spotify artist ID (`P1902`).
+2. **Ingestion:** SPARQL query (scripted or Query Service CSV export).
+3. **Transformation:** append `https://open.spotify.com/artist/{id}`.
+4. **Enrichment:** Spotify `artist` endpoint fields (name, followers, popularity, genres, image URL, API href).
+5. **Storage:** local CSV files under `data/`.
 
-### Collecting Spotify IDs
+Included extract: `data/artists_spotify_ids.csv` (7,970 artists; columns `artist`, `artistLabel`, `spotifyID`). This file matches a Wikidata Query Service export, not the default output schema of `ingest_wikidata.py`.
 
-#### Why IDs Matter?
+## Tech Stack
 
-Spotify API requires unique IDs (embedded in URIs) to fetch metadata for artists, albums, or tracks.To understand how Spotify IDs are used, look at the screenshot below for example:
+- Python 3.11
+- pandas
+- requests (Wikidata SPARQL)
+- spotipy (Spotify Web API, client-credentials auth)
+- python-dotenv
+- matplotlib (exploratory plots)
 
-<img width="100%" alt="charley" src="resources/charley.png">
-<img width="100%" alt="artist id" src="resources/ID.png">
+## Key Features
 
-### Manual vs Automated ID Collection
+- Paginated SPARQL pulls with a 1-second delay between requests
+- Spotify API calls in batches of 10 with a 1-second delay between batches
+- Failed API rows written with empty/zero fields so the output stays aligned
+- Lookup CSVs from search/top-track experiments (`data/spotify_*_lookup.csv`)
+- Exploratory scripts for a single-artist profile, Global Top 50 playlist artists, and an estimated career timeline
 
-- **Manual:** Search by artist name on Spotify
-- **Automated:** Use SPARQL queries via [Wikidata Query Service](https://query.wikidata.org/)
+Spotify does not expose official stream counts. Any listener/stream figures in exploratory scripts are heuristics from popularity and followers, not platform-reported totals.
 
-Example SPARQL Query – Artists
+## Structure
+
+```
+data/            ID extracts, URL-enriched IDs, lookup CSVs
+scripts/         ingestion, transform, API fetch, client setup
+exploratory/     ad-hoc analysis scripts and a Jupyter notebook
+docs/            screenshots of Wikidata/Spotify ID usage
+```
+
+## Run
+
+```bash
+pipenv install
+pipenv shell
+```
+
+Create `.env` in the project root:
+
+```
+SPOTIFY_CLIENT_ID=your_client_id
+SPOTIFY_CLIENT_SECRET=your_client_secret
+```
+
+Credentials come from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Redirect URI used in app setup: `http://localhost:8888/callback`.
+
+From `scripts/`:
+
+```bash
+python ingest_wikidata.py      # SPARQL extract (default cap: 1,000 rows)
+python add_spotify_uri.py      # add SpotifyURI using data/artists_spotify_ids.csv
+python fetch_artist_data.py    # write data/artists_metadata.csv
+python example_usage.py        # inspect one sample artist payload
+```
+
+Exploratory:
+
+```bash
+python exploratory/artist_profile.py
+python exploratory/spotify_analytics.py
+python exploratory/justin_bieber_timeline.py
+```
+
+## SPARQL (artists)
 
 ```sparql
 SELECT ?artist ?artistLabel ?spotifyID WHERE {
-  ?artist wdt:P31 wd:Q5;        # instance of human
-          wdt:P106 wd:Q639669;  # occupation: musician
-          wdt:P1902 ?spotifyID. # has Spotify artist ID
+  ?artist wdt:P31 wd:Q5;
+          wdt:P106 wd:Q639669;
+          wdt:P1902 ?spotifyID.
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 1000
 ```
 
-#### Sample Result:
+Results can also be downloaded as CSV from the [Wikidata Query Service](https://query.wikidata.org/):
 
-Example SPARQL Query – Albums
+<img width="100%" alt="Wikidata SPARQL query result" src="docs/query.png">
 
-```sparql
-SELECT ?album ?albumLabel ?spotifyID ?artist ?artistLabel WHERE {
-  ?album wdt:P31/wdt:P279* wd:Q482994;  # instance/subclass of album
-         wdt:P2205 ?spotifyID;          # Spotify album ID
-         wdt:P175 ?artist.              # performer
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}
-LIMIT 1000000
-```
-
-> You can download the result as a CSV directly from the query interface.
-
-<img width="100%" alt="query result" src="resources/query.png">
-
-## 🛠️ Setup Instructions
-
-### 1. Create Pipenv virtual environment
-
-First Install pipenv on your machine, follow the directions [here](https://pipenv.pypa.io/en/latest/installation.html).
-
-Activate virtual environment:
-
-```bash
-pipenv shell
-```
-
-### 2. Install Dependencies
-
-```bash
-pipenv install
-```
-
-### 3. Get Spotify Developer Credentials
-
-1. Visit the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Log in and click **"Create App"**
-3. Fill out app details:
-   - **App Name:** `Any name `
-   - **Description:** `any desc`
-   - **Redirect URI:** `http://localhost:8888/callback`
-4. Save the app and copy the **Client ID** and **Client Secret**
-
-### 3. Configure Environment Variables
-
-Create a `.env` file in the project root with the following:
-
-```bash
-SPOTIFY_CLIENT_ID=your_client_id
-SPOTIFY_CLIENT_SECRET=your_client_secret
-```
-
->  Ensure `.env` is listed in `.gitignore` to avoid committing sensitive information.
-
-# Further information & References
-
--  [Spotify Web API Documentation](https://developer.spotify.com/documentation/web-api)
--  [Try API Requests in Web Tool](https://developer.spotify.com/documentation/web-api/reference/get-an-album)
-
-### 🔌 Spotify API Supported Endpoints
-
-- **Artists**: Profile info, top tracks, related artists
-- **Tracks**: Metadata, audio features, analysis
-- **Albums**: Details and track listings
-- **Playlists**: Info and tracks
-- **Search**: Multi-type search
-- **Audio Features**: Tempo, energy, key, etc.
-
-### 🔒 Security Guidelines
-
-- Keep your API credentials safe and private (Never commit your `.env` file to Git)
-- Use `.gitignore` to exclude sensitive files
-
-## Understanding the Metadata
-
-| Field          | Description                                          |
-| -------------- | ---------------------------------------------------- |
-| **Popularity** | Spotify’s internal popularity score (0–100)          |
-| **Followers**  | Number of users following the artist on Spotify      |
-| **Genres**     | Spotify-inferred genres                              |
-| **Streams**    | Rough estimate based on popularity and track metrics |
-
-> ⚠️ Spotify does **not** publicly provide exact stream counts.
-
-## Troubleshooting
-
-| Issue                   | Solution                                        |
-| ----------------------- | ----------------------------------------------- |
-| Missing credentials     | Verify `.env` setup                             |
-| Import errors           | Run `pipenv install`                            |
-| Spotify API rate limits | Delays are built-in; avoid frequent requests    |
-| Lookup failures         | Ensure `create_lookup_dataframes()` is executed |
-
-## Notes
-
-- API rate limits apply; excessive calls may be throttled
-- Popularity and follower metrics are dynamic and updated frequently
-- Streaming estimates are inferred, not exact
-- All ID collection respects Spotify API limits and best practices
+[Spotify Web API](https://developer.spotify.com/documentation/web-api)

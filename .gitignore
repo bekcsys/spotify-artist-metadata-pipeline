@@ -24,11 +24,25 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+prompts/
 
 # Virtual environments
 venv/
 env/
 ENV/
+.venv/
+
+# Generated outputs
+data/artists_metadata.csv
+data/wikidata_artist_spotify_ids.csv
+exploratory/top_10_streamers.csv
+exploratory/justin_bieber_timeline.csv
+exploratory/justin_bieber_analysis.png
+.spotify_cache
+.cache-*
+top_10_streamers.csv
+justin_bieber_timeline.csv
+justin_bieber_analysis.png
 
 # IDE
 .vscode/
@@ -38,4 +52,5 @@ ENV/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+.gitignore
